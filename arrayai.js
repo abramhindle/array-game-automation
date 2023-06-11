@@ -140,19 +140,28 @@ class ArrayAI {
     buyCDoubler() {
         buyUpgrade(2,9); // upgrade to double C
     }
+    isBUpgradeEnabled(i) {
+        // 1-indexed
+        return !(document.getElementsByClassName("BUpgrade")[i-1].disabled);
+    }
     buyBUpgrades() {
         for (var i = 1; i <= 10; i++) {
-            buyUpgrade(2,i)
+            if (this.isBUpgradeEnabled(i)) {
+                buyUpgrade(2,i)
+            }
         }
     }
     buyMaxABoosterators() {
         buyMaxABoosterators();
     }
+    buyMaxAUpgrades() {
+        buyUpgrade(1,4); // buy max A upgrades
+    }
     buyUpgrades() {
         this.buyCDoubler();
         this.buyBUpgrades();
         this.buyMaxABoosterators();
-        buyUpgrade(1,4); // buy max A upgrades
+        this.buyMaxAUpgrades();
     }
     startBuyUpgrades(sec=30) {
         let t = "BuyUpgrades";
@@ -241,9 +250,9 @@ class ArrayAI {
 }
 ArrayAI.instance = new ArrayAI();
 ArrayAI.instance.disableAlert();
-var stateDebug = false;
-function stateStart() {
-    if (stateDebug) console.log("stateStart");
+// var stateDebug = false;
+function stateStart(machine=undefined) {
+    machine.debug("stateStart");
     ArrayAI.instance.buyUpgrades();
     ArrayAI.instance.buyAllGenerators();
     var score = parseScore();
@@ -253,11 +262,12 @@ function stateStart() {
     return startStart;
 }
 var minAReset = "{10, 14.14}";
-function stateAResetting() {
-    if (stateDebug) console.log("stateAResetting");
+function stateAResetting(machine=undefined) {
+    machine.debug("stateAResetting");
     var score = parseScore();
     if (gte(score["B"],200)) {
         // buy upgrades will purchase the upgrade at 200
+        buyUpgrade(2,3);
         ArrayAI.instance.buyUpgrades();
         return stateBBuying;
     }
@@ -265,25 +275,30 @@ function stateAResetting() {
         ArrayAI.instance.resetA();
     }
     ArrayAI.instance.buyAGenerators();
-    ArrayAI.instance.buyBGenerators();// should we do this?
-    ArrayAI.instance.buyUpgrades();
+    // From 100 B up just race to 200 B
+    if (! gte(score["B"],101)) {
+        ArrayAI.instance.buyBGenerators();// should we do this?
+        ArrayAI.instance.buyUpgrades();
+    } else {
+        ArrayAI.instance.buyMaxAUpgrades();
+    }
     ArrayAI.instance.buyAGenerators();
     return stateAResetting;
 }
 
-function stateBBuying() {
-    if (stateDebug) console.log("stateBBuying");
+function stateBBuying(machine=undefined) {
+    machine.debug("stateBBuying");
     ArrayAI.instance.buyUpgrades();
     ArrayAI.instance.buyAllGenerators();
     var score = parseScore();
     if (gte(score["B"],"{10, 10}")) {
         return stateBResetting;
     }
-    return startBBuying;
+    return stateBBuying;
 }
 
-function stateBResetting() {
-    if (stateDebug) console.log("stateBResetting");
+function stateBResetting(machine=undefined) {
+    machine.debug("stateBResetting");
     var score = parseScore();
     if (gte(score["C"],200)) {
         // buy upgrades will purchase the upgrade at 200
@@ -301,18 +316,18 @@ function stateBResetting() {
     return stateBResetting;
 }
 
-function stateCBuying() {
-    if (stateDebug) console.log("stateCBuying");
+function stateCBuying(machine=undefined) {
+    machine.debug("stateCBuying");
     ArrayAI.instance.buyUpgrades();
     ArrayAI.instance.buyAllGenerators();
     var score = parseScore();
     if (gte(score["C"],"{10, 14.32}")) {
         return stateBResetting;
     }
-    return startCBuying;
+    return stateCBuying;
 }
-function stateCResetting() {
-    if (stateDebug) console.log("stateCResetting");
+function stateCResetting(machine=undefined) {
+    machine.debug("stateCResetting");
     var score = parseScore();
     if (gte(score["C"],200)) {
         // buy upgrades will purchase the upgrade at 200
@@ -328,12 +343,13 @@ function stateCResetting() {
     ArrayAI.instance.buyAGenerators();
     return stateCResetting;
 }
-function stateDBuying() {
-    if (stateDebug) console.log("stateDBuying");
+function stateDBuying(machine=undefined) {
+    machine.debug("stateDBuying");
     ArrayAI.instance.buyUpgrades();
     ArrayAI.instance.buyAllGenerators();
-    return startDBuying;
+    return stateDBuying;
 }
+/*
 var myTimerStateMachine;
 var myState;
 function stateMachine(startState, seconds=5) {
@@ -343,6 +359,41 @@ function stateMachine(startState, seconds=5) {
     }, seconds * 1000);
 }
 stateMachine(stateStart,5);
+stateDebug = true;
+*/
+
+class ArrayStateMachine {
+    constructor(start = stateStart, debug=false) {
+        this.state = start;
+        this.interval = 0;
+        this._debug = debug;
+    }
+    setState( state ) {
+        this.state = state;
+    }
+    tick() {
+        this.state = this.state(this);
+    }
+    start(seconds = 5) {
+        console.log("Starting Statemachine "+seconds+" seconds");
+        this.interval = setInterval( () => this.tick(), seconds * 1000);
+    }
+    stop() {
+        console.log("Stopping Statemachine");
+        clearInterval(this.interval);
+        this.interval = 0;
+    }
+    debug(x) {
+        if (this._debug) {
+            console.log(x);
+        }
+    }
+}
+
+stateMachine = new ArrayStateMachine(stateStart,true);
+stateMachine.start(5);
+
+
 /*
 
   thoughts:

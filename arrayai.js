@@ -247,6 +247,22 @@ class ArrayAI {
             delete this.alert;
         }
     }
+    disableConfirm() {
+        if ( ! this.confirm ) {
+            this.confirm = window.confirm;
+        }
+        window.confirm = (x) => true;
+    }
+    enableConfirm() {
+        if ( this.confirm ) {
+            window.confirm = this.confirm;
+            delete this.confirm;
+        }
+    }
+    isCMilestoneMet(i) {
+        // DANGER DANGER
+        return game.CMilestonesReached >= i;
+    }
 }
 ArrayAI.instance = new ArrayAI();
 ArrayAI.instance.disableAlert();
@@ -259,7 +275,7 @@ function stateStart(machine=undefined) {
     if (gte(score["A"],"{10, 10}")) {
         return stateAResetting;
     }
-    return startStart;
+    return stateStart;
 }
 var minAReset = "{10, 14.14}";
 function stateAResetting(machine=undefined) {
@@ -271,7 +287,7 @@ function stateAResetting(machine=undefined) {
         ArrayAI.instance.buyUpgrades();
         return stateBBuying;
     }
-    if (gte(score["A"], minAReset)) {
+    if (gte(score["A"], machine.get("minAReset",minAReset))) {
         ArrayAI.instance.resetA();
     }
     ArrayAI.instance.buyAGenerators();
@@ -291,7 +307,13 @@ function stateBBuying(machine=undefined) {
     ArrayAI.instance.buyUpgrades();
     ArrayAI.instance.buyAllGenerators();
     var score = parseScore();
+    if (gte(score["B"],100000) && !machine.get("triedBChallenge",false)) {
+        machine.set("triedBChallenge",true);
+        machine.push(stateBBuying);
+        return stateChooseChallenge;
+    }
     if (gte(score["B"],"{10, 10}")) {
+        machine.set("triedBChallenge",false);
         return stateBResetting;
     }
     return stateBBuying;
@@ -300,19 +322,36 @@ function stateBBuying(machine=undefined) {
 function stateBResetting(machine=undefined) {
     machine.debug("stateBResetting");
     var score = parseScore();
-    if (gte(score["C"],200)) {
+    if (ArrayAI.instance.isCMilestoneMet(10) || gte(score["C"],300)) {
         // buy upgrades will purchase the upgrade at 200
+        console.log("Milestone met? "+ ArrayAI.instance.isCMilestoneMet(10))
+        console.log(document.querySelectorAll(".CMilestone"));
+        console.log("Score "+ score + " " + gte(score["C"],300));
         ArrayAI.instance.buyUpgrades();
         return stateCBuying;
     }
-    if (gte(score["B"],"{10, 10}")) {
-        ArrayAI.instance.resetA();
+    var bResetScore = ArrayAI.instance.isCMilestoneMet(8)?"{10, 14.2301}":"{10, 10.01}";
+    if (gte(score["B"],bResetScore)) {
+        // there's going to be a problem here
+        // we have to go back to Aresetting unless
+        // we have 20% gain enabled        
+        ArrayAI.instance.resetB();
+        if (ArrayAI.instance.isBUpgradeEnabled(3)) {
+            console.log("We don't have enough Cs to keep 20% B/s going");
+            return stateStart;
+        }
     }   
     ArrayAI.instance.buyAGenerators();
     ArrayAI.instance.buyBGenerators();
-    ArrayAI.instance.buyCGenerators(); // should we?
+    if (ArrayAI.instance.isCMilestoneMet(9) && !ArrayAI.instance.isCMilestoneMet(10)) {
+        // don't buy between 100 and 300
+        if (game.CGeneratorsBought[1].toString() == "0") {
+            buyGenerator(3,2); // just buy 1
+        }
+    } else {
+        ArrayAI.instance.buyCGenerators(); 
+    }
     ArrayAI.instance.buyUpgrades();
-    ArrayAI.instance.buyAGenerators();
     return stateBResetting;
 }
 
@@ -321,8 +360,11 @@ function stateCBuying(machine=undefined) {
     ArrayAI.instance.buyUpgrades();
     ArrayAI.instance.buyAllGenerators();
     var score = parseScore();
-    if (gte(score["C"],"{10, 14.32}")) {
-        return stateBResetting;
+    machine.set("CBuyingTicks",1+machine.get("CBuyingTicks",1));
+    var cticks = machine.get("CBuyingTicks",0);
+    if (cticks > 0 && (cticks % machine.get("CTicksPerChallenge",50)) == 0) {
+        machine.push(stateCBuying);
+        return stateChooseChallenge;
     }
     return stateCBuying;
 }
@@ -335,7 +377,9 @@ function stateCResetting(machine=undefined) {
         return stateDBuying;
     }
     if (gte(score["B"],"{10, 10}")) {
-        ArrayAI.instance.resetA();
+        ArrayAI.instance.resetC();
+        // we need a check here for if we achieved the C/s
+        return stateStart;
     }   
     ArrayAI.instance.buyAGenerators();
     ArrayAI.instance.buyBGenerators();// should we do this?
@@ -347,6 +391,10 @@ function stateDBuying(machine=undefined) {
     machine.debug("stateDBuying");
     ArrayAI.instance.buyUpgrades();
     ArrayAI.instance.buyAllGenerators();
+    if (Math.random < 0.01) {
+        
+    }
+    
     return stateDBuying;
 }
 /*
@@ -365,8 +413,12 @@ stateDebug = true;
 class ArrayStateMachine {
     constructor(start = stateStart, debug=false) {
         this.state = start;
+        this.startState = start;
         this.interval = 0;
         this._debug = debug;
+        this.vals = {};
+        this.seconds = 5;
+        this.stateStack = [];
     }
     setState( state ) {
         this.state = state;
@@ -375,6 +427,7 @@ class ArrayStateMachine {
         this.state = this.state(this);
     }
     start(seconds = 5) {
+        this.seconds = seconds;
         console.log("Starting Statemachine "+seconds+" seconds");
         this.interval = setInterval( () => this.tick(), seconds * 1000);
     }
@@ -388,11 +441,99 @@ class ArrayStateMachine {
             console.log(x);
         }
     }
+    get(x,dfl) {
+        if (x in this.vals) {
+            return this.vals[x];
+        } else {
+            return dfl;
+        }
+    }
+    set(x,v) {
+        this.vals[x] = v;
+        return v;
+    }
+    push(state) {
+        this.stateStack.push(state);
+    }
+    pop(state) {
+        var v = this.stateStack.pop();
+        if (!v) {
+            return this.startState;
+        }
+        return v;
+    }
 }
 
 stateMachine = new ArrayStateMachine(stateStart,true);
-stateMachine.start(5);
+stateMachine.start(2);
+stateMachine.set("ticks",30);
 
+function isAChallengeAvailable(oneIndex) {
+    var buttons = document.querySelectorAll(".challenge.AButton");
+    return (oneIndex-1 < buttons.length) &&
+        document.querySelectorAll(".challenge.AButton")[oneIndex-1].style.display != "none" &&
+        document.querySelectorAll(".challenge.AButton")[oneIndex-1].innerText.indexOf("[6/6]") == -1;
+}
+
+function stateChooseChallenge(machine) {
+    machine.debug("ChooseChallenge");
+    changeTab(3);
+    // var choice = 1; // choose!
+    var choice = 1+Math.floor(Math.random() * 4);
+    machine.debug("Chose Challenge "+choice);
+    // DANGER DANGER
+    if ( isAChallengeAvailable(choice)) {
+        ArrayAI.instance.disableConfirm();
+        enterChallenge(choice);
+        machine.set("challengeTicks",machine.get("ticks",10));
+        machine.set("challenge",choice);
+        return stateDoChallenge;
+    }
+    // Not sure what to do;
+    return stateChallengeCleanUp;
+}
+function stateDoChallenge(machine) {
+    machine.debug("StateDoChallenge");
+    var ticks = machine.get("challengeTicks",0);
+    machine.set("challengeTicks",ticks-1);
+    var challenge = machine.get("challenge",1)    
+    if (!document.getElementById("finishChallengeButton").disabled && document.getElementById("finishChallengeButton").disabled !== "") {
+        finishChallenge( challenge );
+        return stateChallengeCleanUp;
+    }
+    if (ticks <= 0) {
+        enterChallenge( challenge );
+        return stateChallengeCleanUp;
+    }
+    ArrayAI.instance.buyAllGenerators();
+    ArrayAI.instance.buyUpgrades();
+    return stateDoChallenge;
+}
+function stateChallengeCleanUp(machine) {
+    ArrayAI.instance.enableConfirm();
+    machine.set("challengeTicks",0);
+    machine.set("challenge",0);
+    return machine.pop(); 
+}
+
+stateMachine.state  = stateChooseChallenge;
+stateMachine.set("ticks",50);
+/*
+
+Todo:
+
+ Challenges.
+ - enterChallenge(1) - first A challenge enter and exit
+ - finisChallenge() - finish it
+ - maybe a state, try challenges
+ - try challenges
+   - chooses a challenge
+   - stays in challenge mode for N ticks
+     - checks to finish challenge
+   - leaves the challenge
+ - when to schedule them
+
+*/
 
 /*
 

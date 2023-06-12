@@ -35,6 +35,23 @@ function gte(x,y) {
         return Number((""+x).replaceAll(",","")) >= Number((""+y).replaceAll(",",""))
     }
 }
+function lte(x,y) {
+    return gte(y,x);
+}
+function gt(x,y) {
+    var g = gte(x,y);
+    var l = lte(x,y);
+    return (g && l)?false:g;
+}
+function lt(x,y) {
+    return gt(y,x);
+}
+function eq(x,y) {
+    return lte(x,y) && gte(x,y);
+}
+function neq(x,y) {
+    return (!eq(x,y));
+}
 function parseScore() {
     var scores = [...document.getElementById("array").children].map(x => x.innerText);
     var sectioned = document.getElementById("array").innerText.indexOf("[") >= 0;
@@ -186,7 +203,11 @@ class ArrayAI {
         this._reset(3);
     }
     resetD() {
-        this._reset(4);
+        // hmmm
+        this.disableConfirm();
+        upgradeSeparator();
+        this.enableConfirm();
+        //this._reset(4);
     }
     _startReset(t, f, sec=120) {
         console.log("Starting " + t + " at "+ sec + "s");
@@ -277,7 +298,8 @@ function stateStart(machine=undefined) {
     }
     return stateStart;
 }
-var minAReset = "{10, 14.14}";
+var _minAReset = "{10, 10.01}";
+var minAReset = _minAReset;
 function stateAResetting(machine=undefined) {
     machine.debug("stateAResetting");
     var score = parseScore();
@@ -285,7 +307,12 @@ function stateAResetting(machine=undefined) {
         // buy upgrades will purchase the upgrade at 200
         buyUpgrade(2,3);
         ArrayAI.instance.buyUpgrades();
+        minAReset = _minAReset;
         return stateBBuying;
+    }
+    if (gte(score["A"], machine.get("minAResetThresh","{10, 13.50}"))) {
+        minAReset = "{10, 14.3201}";
+        console.log("Setting min Reset to 14.3201 instead of 10.01");
     }
     if (gte(score["A"], machine.get("minAReset",minAReset))) {
         ArrayAI.instance.resetA();
@@ -298,7 +325,6 @@ function stateAResetting(machine=undefined) {
     } else {
         ArrayAI.instance.buyMaxAUpgrades();
     }
-    ArrayAI.instance.buyAGenerators();
     return stateAResetting;
 }
 
@@ -401,6 +427,7 @@ function stateDBuying(machine=undefined) {
         machine.push(stateDBuying);
         return stateChooseChallenge;
     }
+    var score = parseScore();
     if (gte(score["D"],"{10, 12.01}")) {
         // time to build up to a reset
         return stateDResetting;
@@ -420,6 +447,11 @@ function stateDResetting(machine=undefined) {
     ArrayAI.instance.buyBGenerators();
     ArrayAI.instance.buyCGenerators();
     ArrayAI.instance.buyUpgrades();
+    var ticks = machine.inc("DResettingTicks",0);
+    if (ticks > 0 && (ticks % machine.get("DResettingTicksPerChallenge",600)) == 0) {
+        machine.push(stateDResetting);
+        return stateChooseChallenge;        
+    }
     return stateDResetting;
 }
 
@@ -430,15 +462,47 @@ function isAChallengeAvailable(oneIndex) {
         document.querySelectorAll(".challenge.AButton")[oneIndex-1].style.display != "none" &&
         document.querySelectorAll(".challenge.AButton")[oneIndex-1].innerText.indexOf("[6/6]") == -1;
 }
+function isBChallengeAvailable(oneIndex) {
+    var buttons = document.querySelectorAll(".challenge.BButton");
+    return (oneIndex-1 < buttons.length) &&
+        document.querySelectorAll(".challenge.BButton")[oneIndex-1].style.display != "none" &&
+        document.querySelectorAll(".challenge.BButton")[oneIndex-1].innerText.indexOf("[6/6]") == -1;
+}
+
+function isChallengeAvailable(num) {
+    if (num >= 5) {
+        // B Challenge
+        return isBChallengeAvailable(num-4);
+    }
+    return isAChallengeAvailable(num);
+}
 
 function stateChooseChallenge(machine) {
     machine.debug("ChooseChallenge");
     changeTab(3);
+    return stateChooseChallengeE;
+}
+
+function chooseChallenge() {
+    var arr = [];
+    for (var i = 0 ; i < 8; i++ ) {
+        if (isChallengeAvailable(i+1)) {
+            arr.push(i+1);
+        }
+    }
+    if (arr.length == 0) {
+        return false;
+    }
+    return arr[Math.floor(Math.random()*arr.length)];
+}
+
+function stateChooseChallengeE(machine) {
+    machine.debug("ChooseChallengeE");
     // var choice = 1; // choose!
-    var choice = 1+Math.floor(Math.random() * 4);
-    machine.debug("Chose Challenge "+choice);
+    var choice = chooseChallenge();//1+Math.floor(Math.random() * 8);
     // DANGER DANGER
-    if ( isAChallengeAvailable(choice)) {
+    if ( choice && isChallengeAvailable(choice)) {
+        machine.debug("Chose Challenge "+choice);
         ArrayAI.instance.disableConfirm();
         enterChallenge(choice);
         machine.set("challengeTicks",machine.get("ticks",10));
@@ -446,6 +510,7 @@ function stateChooseChallenge(machine) {
         return stateDoChallenge;
     }
     // Not sure what to do;
+    console.log("Challenge Wasn't Available? "+choice);
     return stateChallengeCleanUp;
 }
 function stateDoChallenge(machine) {
@@ -454,10 +519,12 @@ function stateDoChallenge(machine) {
     machine.set("challengeTicks",ticks-1);
     var challenge = machine.get("challenge",1)    
     if (!document.getElementById("finishChallengeButton").disabled && document.getElementById("finishChallengeButton").disabled !== "") {
+        console.log("Finishing Challenge "+challenge);
         finishChallenge( challenge );
         return stateChallengeCleanUp;
     }
     if (ticks <= 0) {
+        console.log("Bailing on Challenge "+challenge);
         enterChallenge( challenge );
         return stateChallengeCleanUp;
     }
@@ -536,6 +603,11 @@ class ArrayStateMachine {
         if (!v) {
             return this.startState;
         }
+        return v;
+    }
+    inc(x) {
+        var v = 1+this.get(x,0);
+        this.set(x,v);
         return v;
     }
 }

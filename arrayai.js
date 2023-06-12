@@ -23,7 +23,7 @@ myFastTimerCBuy = setInterval(()=>buyMaxGenerators(3,6), 17*1000)
 
 function convertBird(x) {
     if (x[0] == "{") {
-        return Number(x.split(", ")[1].replace("}",""))
+        return Number(x.split(", ")[1].replace("}","").replaceAll(",",""))
     } else {
         return Math.log10(x);
     }
@@ -362,7 +362,7 @@ function stateCBuying(machine=undefined) {
     var score = parseScore();
     machine.set("CBuyingTicks",1+machine.get("CBuyingTicks",1));
     var cticks = machine.get("CBuyingTicks",0);
-    if (cticks > 0 && (cticks % machine.get("CTicksPerChallenge",50)) == 0) {
+    if (cticks > 0 && (cticks % machine.get("CTicksPerChallenge",200)) == 0) {
         machine.push(stateCBuying);
         return stateChooseChallenge;
     }
@@ -374,7 +374,7 @@ function stateCBuying(machine=undefined) {
 function stateCResetting(machine=undefined) {
     machine.debug("stateCResetting");
     var score = parseScore();
-    if (gte(score["C"],200)) {
+    if (gte(score["D"],200)) {
         // buy upgrades will purchase the upgrade at 200
         ArrayAI.instance.buyUpgrades();
         return stateDBuying;
@@ -382,7 +382,8 @@ function stateCResetting(machine=undefined) {
     if (gte(score["C"],"{10, 10}")) {
         ArrayAI.instance.resetC();
         // we need a check here for if we achieved the C/s
-        return stateStart;
+        // if 
+        // return stateStart;
     }   
     ArrayAI.instance.buyAGenerators();
     ArrayAI.instance.buyBGenerators();// should we do this?
@@ -394,12 +395,35 @@ function stateDBuying(machine=undefined) {
     machine.debug("stateDBuying");
     ArrayAI.instance.buyUpgrades();
     ArrayAI.instance.buyAllGenerators();
-    if (Math.random < 0.01) {
-        
+    machine.set("DBuyingTicks",1+machine.get("DBuyingTicks",1));
+    var cticks = machine.get("DBuyingTicks",0);
+    if (cticks > 0 && (cticks % machine.get("DTicksPerChallenge",200)) == 0) {
+        machine.push(stateDBuying);
+        return stateChooseChallenge;
     }
-    
+    if (gte(score["D"],"{10, 12.01}")) {
+        // time to build up to a reset
+        return stateDResetting;
+    }
     return stateDBuying;
 }
+function stateDResetting(machine=undefined) {
+    machine.debug("stateDResetting");
+    var score = parseScore();
+    if (gte(score["D"],"{10, 17.3201}")) {
+        ArrayAI.instance.resetD();
+        // we need a check here for if we achieved the C/s
+        // if 
+        return stateStart;
+    }   
+    ArrayAI.instance.buyAGenerators();
+    ArrayAI.instance.buyBGenerators();
+    ArrayAI.instance.buyCGenerators();
+    ArrayAI.instance.buyUpgrades();
+    return stateDResetting;
+}
+
+
 function isAChallengeAvailable(oneIndex) {
     var buttons = document.querySelectorAll(".challenge.AButton");
     return (oneIndex-1 < buttons.length) &&

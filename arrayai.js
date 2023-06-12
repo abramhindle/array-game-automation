@@ -366,6 +366,9 @@ function stateCBuying(machine=undefined) {
         machine.push(stateCBuying);
         return stateChooseChallenge;
     }
+    if (gte(score["C"],"{10, 10.01}")) {
+        return stateCResetting;
+    }
     return stateCBuying;
 }
 function stateCResetting(machine=undefined) {
@@ -376,7 +379,7 @@ function stateCResetting(machine=undefined) {
         ArrayAI.instance.buyUpgrades();
         return stateDBuying;
     }
-    if (gte(score["B"],"{10, 10}")) {
+    if (gte(score["C"],"{10, 10}")) {
         ArrayAI.instance.resetC();
         // we need a check here for if we achieved the C/s
         return stateStart;
@@ -397,6 +400,55 @@ function stateDBuying(machine=undefined) {
     
     return stateDBuying;
 }
+function isAChallengeAvailable(oneIndex) {
+    var buttons = document.querySelectorAll(".challenge.AButton");
+    return (oneIndex-1 < buttons.length) &&
+        document.querySelectorAll(".challenge.AButton")[oneIndex-1].style.display != "none" &&
+        document.querySelectorAll(".challenge.AButton")[oneIndex-1].innerText.indexOf("[6/6]") == -1;
+}
+
+function stateChooseChallenge(machine) {
+    machine.debug("ChooseChallenge");
+    changeTab(3);
+    // var choice = 1; // choose!
+    var choice = 1+Math.floor(Math.random() * 4);
+    machine.debug("Chose Challenge "+choice);
+    // DANGER DANGER
+    if ( isAChallengeAvailable(choice)) {
+        ArrayAI.instance.disableConfirm();
+        enterChallenge(choice);
+        machine.set("challengeTicks",machine.get("ticks",10));
+        machine.set("challenge",choice);
+        return stateDoChallenge;
+    }
+    // Not sure what to do;
+    return stateChallengeCleanUp;
+}
+function stateDoChallenge(machine) {
+    machine.debug("StateDoChallenge");
+    var ticks = machine.get("challengeTicks",0);
+    machine.set("challengeTicks",ticks-1);
+    var challenge = machine.get("challenge",1)    
+    if (!document.getElementById("finishChallengeButton").disabled && document.getElementById("finishChallengeButton").disabled !== "") {
+        finishChallenge( challenge );
+        return stateChallengeCleanUp;
+    }
+    if (ticks <= 0) {
+        enterChallenge( challenge );
+        return stateChallengeCleanUp;
+    }
+    ArrayAI.instance.buyAllGenerators();
+    ArrayAI.instance.buyUpgrades();
+    return stateDoChallenge;
+}
+function stateChallengeCleanUp(machine) {
+    ArrayAI.instance.enableConfirm();
+    machine.set("challengeTicks",0);
+    machine.set("challenge",0);
+    return machine.pop(); 
+}
+
+
 /*
 var myTimerStateMachine;
 var myState;
@@ -468,53 +520,6 @@ stateMachine = new ArrayStateMachine(stateStart,true);
 stateMachine.start(2);
 stateMachine.set("ticks",30);
 
-function isAChallengeAvailable(oneIndex) {
-    var buttons = document.querySelectorAll(".challenge.AButton");
-    return (oneIndex-1 < buttons.length) &&
-        document.querySelectorAll(".challenge.AButton")[oneIndex-1].style.display != "none" &&
-        document.querySelectorAll(".challenge.AButton")[oneIndex-1].innerText.indexOf("[6/6]") == -1;
-}
-
-function stateChooseChallenge(machine) {
-    machine.debug("ChooseChallenge");
-    changeTab(3);
-    // var choice = 1; // choose!
-    var choice = 1+Math.floor(Math.random() * 4);
-    machine.debug("Chose Challenge "+choice);
-    // DANGER DANGER
-    if ( isAChallengeAvailable(choice)) {
-        ArrayAI.instance.disableConfirm();
-        enterChallenge(choice);
-        machine.set("challengeTicks",machine.get("ticks",10));
-        machine.set("challenge",choice);
-        return stateDoChallenge;
-    }
-    // Not sure what to do;
-    return stateChallengeCleanUp;
-}
-function stateDoChallenge(machine) {
-    machine.debug("StateDoChallenge");
-    var ticks = machine.get("challengeTicks",0);
-    machine.set("challengeTicks",ticks-1);
-    var challenge = machine.get("challenge",1)    
-    if (!document.getElementById("finishChallengeButton").disabled && document.getElementById("finishChallengeButton").disabled !== "") {
-        finishChallenge( challenge );
-        return stateChallengeCleanUp;
-    }
-    if (ticks <= 0) {
-        enterChallenge( challenge );
-        return stateChallengeCleanUp;
-    }
-    ArrayAI.instance.buyAllGenerators();
-    ArrayAI.instance.buyUpgrades();
-    return stateDoChallenge;
-}
-function stateChallengeCleanUp(machine) {
-    ArrayAI.instance.enableConfirm();
-    machine.set("challengeTicks",0);
-    machine.set("challenge",0);
-    return machine.pop(); 
-}
 
 stateMachine.state  = stateChooseChallenge;
 stateMachine.set("ticks",50);

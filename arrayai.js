@@ -62,8 +62,9 @@ function parseScore() {
         score["B"] = 0;
         score["C"] = 0;
         score["D"] = 0;
-        score["S"] = scores[scores.length-2];
-        score["E"] = scores[scores.length-1];
+        score["S"] = scores[scores.length-3];
+        score["E"] = scores[scores.length-2];
+        score["F"] = scores[scores.length-1];
         if ( scores.length > 3 ) {
             score["B"] = scores[1];
         }
@@ -72,6 +73,10 @@ function parseScore() {
         }
         if ( scores.length > 5 ) {
             score["D"] = scores[3];
+        }
+        if ( scores.length > 6 ) {
+            score["S"] = scores[4];
+            score["E"] = scores[5];
         }
     } else {
         score["B"] = 0;
@@ -95,6 +100,7 @@ class ArrayAI {
     // Task 1: keep track of timers
     constructor() {
         this.timers = {};
+        ArrayAI.instance = this;
     }
     startTimer( t, c, sec = 30 ) {
         this.timers[t] = setInterval( c, sec * 1000 );
@@ -161,6 +167,9 @@ class ArrayAI {
         // 1-indexed
         return !(document.getElementsByClassName("BUpgrade")[i-1].disabled);
     }
+    isBUpgradeBuyable(i) {
+        return this.isBUpgradeEnabled(i);
+    }
     buyBUpgrades() {
         for (var i = 1; i <= 10; i++) {
             if (this.isBUpgradeEnabled(i)) {
@@ -174,11 +183,34 @@ class ArrayAI {
     buyMaxAUpgrades() {
         buyUpgrade(1,4); // buy max A upgrades
     }
+    isSeparatorUpgradeBuyable(oneIndexed) {
+        return game.separatorUpgradesBought[oneIndexed-1].toNumber() == 0;
+    }
+    buySeparatorUpgrade(oneIndexed) {
+        if (this.isSeparatorUpgradeBuyable(oneIndexed)) {
+            buySeparatorUpgrade(oneIndexed);
+        }
+    }
+    buySeparatorUpgrades() {
+        for (var i = 1; i <= 6; i++) {
+            this.buySeparatorUpgrade(i);
+        }
+    }
+    buySBoosts() {
+        buySeparatorBoost(4);
+    }
     buyUpgrades() {
         this.buyCDoubler();
         this.buyBUpgrades();
         this.buyMaxABoosterators();
         this.buyMaxAUpgrades();
+        this.buySeparatorUpgrades();
+    }
+    buyMaxEF() {
+        gainMaxArray(1)
+        gainMaxArray(2)
+        buyMaxGenerators(5,1)
+        buyMaxGenerators(6,1)
     }
     startBuyUpgrades(sec=30) {
         let t = "BuyUpgrades";
@@ -298,32 +330,41 @@ function stateStart(machine=undefined) {
     }
     return stateStart;
 }
+
+// There's a bug here we transition to BBuying without our upgrade
 var _minAReset = "{10, 10.01}";
 var minAReset = _minAReset;
 function stateAResetting(machine=undefined) {
     machine.debug("stateAResetting");
     var score = parseScore();
-    if (gte(score["B"],200)) {
+    if (gte(score["B"],200) && ArrayAI.instance.isBUpgradeBuyable(3)) {
         // buy upgrades will purchase the upgrade at 200
         buyUpgrade(2,3);
         ArrayAI.instance.buyUpgrades();
         minAReset = _minAReset;
+        changeTab(1);
+        // it should be buyable now right?
+        // return stateBBuying;
+    }
+    // did we buy it already?
+    if (!ArrayAI.instance.isBUpgradeBuyable(3)) {
+        console.log("OK we can skip resetting A, we get 20% already");
+        changeTab(1);
         return stateBBuying;
     }
-    if (gte(score["A"], machine.get("minAResetThresh","{10, 13.50}"))) {
+    if (gte(score["A"], machine.get("minAResetThresh","{10, 13.50}")) && minAReset == _minAReset ) {
         minAReset = "{10, 14.3201}";
         console.log("Setting min Reset to 14.3201 instead of 10.01");
     }
     if (gte(score["A"], machine.get("minAReset",minAReset))) {
         ArrayAI.instance.resetA();
     }
+    ArrayAI.instance.buyMaxAUpgrades();
     ArrayAI.instance.buyAGenerators();
     // From 100 B up just race to 200 B
-    if (! gte(score["B"],101)) {
+    if (lte(score["B"],100) || gt(score["B"],200)) {
         ArrayAI.instance.buyBGenerators();// should we do this?
         ArrayAI.instance.buyUpgrades();
-    } else {
-        ArrayAI.instance.buyMaxAUpgrades();
     }
     return stateAResetting;
 }
@@ -336,7 +377,7 @@ function stateBBuying(machine=undefined) {
     if (gte(score["B"],100000) && !machine.get("triedBChallenge",false)) {
         machine.set("triedBChallenge",true);
         machine.push(stateBBuying);
-        return stateChooseChallenge;
+        return stateChooseAChallenge;
     }
     if (gte(score["B"],"{10, 10}")) {
         machine.set("triedBChallenge",false);
@@ -378,6 +419,12 @@ function stateBResetting(machine=undefined) {
         ArrayAI.instance.buyCGenerators(); 
     }
     ArrayAI.instance.buyUpgrades();
+    // do we do a challenge?
+    var ticks = machine.inc("BResetting Ticks");
+    if (ticks > 0 && ticks % machine.get("BTicksPerChallenge",200) == 0) {
+        machine.push(stateBResetting);
+        return stateChooseAChallenge;
+    }
     return stateBResetting;
 }
 
@@ -437,11 +484,16 @@ function stateDBuying(machine=undefined) {
 function stateDResetting(machine=undefined) {
     machine.debug("stateDResetting");
     var score = parseScore();
-    if (gte(score["D"],"{10, 17.3201}")) {
+    if (gte(score["D"],machine.get("DReset","{10, 17.3201}"))) {
         ArrayAI.instance.resetD();
-        // we need a check here for if we achieved the C/s
-        // if 
-        return stateStart;
+        // we need a check here for if we achieved the D/s
+        // probably we're fine, the state machine will run its course
+        if (!ArrayAI.instance.isSeparatorUpgradeBuyable(5)) {
+            changeTab(5);
+            return stateSeparator;
+        } else {
+            return stateStart;
+        }
     }   
     ArrayAI.instance.buyAGenerators();
     ArrayAI.instance.buyBGenerators();
@@ -454,7 +506,15 @@ function stateDResetting(machine=undefined) {
     }
     return stateDResetting;
 }
-
+function stateSeparator(machine) {
+    machine.debug("stateSeparator");
+    var score = parseScore();
+    ArrayAI.instance.buyAllGenerators();
+    ArrayAI.instance.buyUpgrades();
+    ArrayAI.instance.buySBoosts();
+    ArrayAI.instance.buyMaxEF();
+    return stateSeparator;
+}
 
 function isAChallengeAvailable(oneIndex) {
     var buttons = document.querySelectorAll(".challenge.AButton");
@@ -482,24 +542,44 @@ function stateChooseChallenge(machine) {
     changeTab(3);
     return stateChooseChallengeE;
 }
-
-function chooseChallenge() {
+function stateChooseAChallenge(machine) {
+    machine.debug("ChooseAChallenge");
+    changeTab(3);
+    return stateChooseAChallengeE;
+}
+function availableChallenges() {
     var arr = [];
     for (var i = 0 ; i < 8; i++ ) {
         if (isChallengeAvailable(i+1)) {
             arr.push(i+1);
         }
     }
+    return arr;
+}
+function choose(arr) {
+    return arr[Math.floor(Math.random()*arr.length)];
+}
+function chooseChallenge() {
+    var arr = availableChallenges();
     if (arr.length == 0) {
         return false;
     }
-    return arr[Math.floor(Math.random()*arr.length)];
+    return choose(arr);
+}
+function chooseAChallenge() {
+    var arr = availableChallenges();
+    arr = arr.filter( x => x <= 4 );
+    if (arr.length == 0) {
+        return false;
+    }
+    return choose(arr);
 }
 
-function stateChooseChallengeE(machine) {
-    machine.debug("ChooseChallengeE");
+function _stateChooseChallengeE(machine,name,chooser=chooseChallenge) {
+    // private version of stateChooseChallengeE to allow for As or A+B
+    machine.debug(name);
     // var choice = 1; // choose!
-    var choice = chooseChallenge();//1+Math.floor(Math.random() * 8);
+    var choice = chooser();// chooseChallenge();//1+Math.floor(Math.random() * 8);
     // DANGER DANGER
     if ( choice && isChallengeAvailable(choice)) {
         machine.debug("Chose Challenge "+choice);
@@ -513,6 +593,14 @@ function stateChooseChallengeE(machine) {
     console.log("Challenge Wasn't Available? "+choice);
     return stateChallengeCleanUp;
 }
+function stateChooseChallengeE(machine) {
+    return _stateChooseChallengeE(machine,"ChooseChallengeE",chooseChallenge);
+}
+function stateChooseAChallengeE(machine) {
+    return _stateChooseChallengeE(machine,"ChooseAChallengeE",chooseAChallenge);
+}
+
+
 function stateDoChallenge(machine) {
     machine.debug("StateDoChallenge");
     var ticks = machine.get("challengeTicks",0);
@@ -544,8 +632,8 @@ function stateChallengeCleanUp(machine) {
 var myTimerStateMachine;
 var myState;
 function stateMachine(startState, seconds=5) {
-    myState = startState;
-    myTimerStateMachine = setInterval(function() {
+    myState = startState; 
+   myTimerStateMachine = setInterval(function() {
         myState = myState();
     }, seconds * 1000);
 }
@@ -611,14 +699,14 @@ class ArrayStateMachine {
         return v;
     }
 }
-
 stateMachine = new ArrayStateMachine(stateStart,true);
+
 stateMachine.start(2);
-stateMachine.set("ticks",30);
-
-
-stateMachine.state  = stateChooseChallenge;
-stateMachine.set("ticks",50);
+// stateMachine.set("ticks",30);
+// 
+// 
+// stateMachine.state  = stateChooseChallenge;
+// stateMachine.set("ticks",50);
 /*
 
 Todo:

@@ -18,6 +18,20 @@
 */
 
 /*
+
+  For Array game v0.4.2
+ 
+  Go to: https://demonin.com/games/arrayGame/
+
+  Usage: open up firefox, open up inspector, go to console and paste
+  all this code into the console. It will start playing the game for you.
+
+  After having fun consider paying demonin for it:
+
+  https://www.patreon.com/Demonin
+*/
+
+/*
 Notes:
    buyUpgrade(1,4) buys all the *X upgrades for A
  buyMaxGenerators(1,6) buys max A generators for A
@@ -40,6 +54,13 @@ myFastTimerBBuy = setInterval(()=>buyMaxGenerators(2,6), 11*1000)
 myFastTimerABuy = setInterval(()=>buyMaxGenerators(1,6), 7*1000)
 myFastTimerCBuy = setInterval(()=>buyMaxGenerators(3,6), 17*1000) 
 */
+
+/*
+
+  Initially I was trying to stay away from the game's state but I eventually gave up.
+  So there is a mix of screen scraping and direct calls and even a bit of inspection of the global game object.
+
+*/ 
 
 function convertBird(x) {
     if (x[0] == "{") {
@@ -116,6 +137,8 @@ function parseScore() {
     return score
 }
 
+// ArrayAI class is not an AI, it's just a utility.
+// Initially it kept timers but we use a state machine now.
 class ArrayAI {
     constructor() {
         ArrayAI.instance = this;
@@ -237,12 +260,18 @@ class ArrayAI {
         return game.CMilestonesReached >= i;
     }
 }
+
+// Singleton :(
 ArrayAI.instance = new ArrayAI();
 ArrayAI.instance.disableAlert();
 
 function AI() {
     return ArrayAI.instance;
 }
+
+// States are functions that return states
+// State: machine -> State
+
 
 // var stateDebug = false;
 function stateStart(machine=undefined) {

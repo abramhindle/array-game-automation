@@ -32,30 +32,6 @@
 */
 
 /*
-Notes:
-   buyUpgrade(1,4) buys all the *X upgrades for A
- buyMaxGenerators(1,6) buys max A generators for A
- buyMaxGenerators(2,6) buys max B generators for B
- buyMaxABoosterators() buys A boosters on the B page
- prestigerConfirm(2) reset B for C points
- buyMaxGenerators(3,6) buys max C generators for C
- buyMaxGenerators(4,6) buys max D generators for D
-
- get the score: document.getElementById("array").innerText 
-*/
-
-/*
-Original timers:
-
-clearInterval(myTimerABReset);  myTimerABReset = setInterval(  () => { console.log(Date.now() + " B reset "); prestigeConfirm(2)} , 90*1000) 
-myTimerABoosterators = setInterval( () => buyMaxABoosterators(), 10*1000)
-myTimerABReset = setInterval(  () => prestigeConfirm(2), 30*1000)
-myFastTimerBBuy = setInterval(()=>buyMaxGenerators(2,6), 11*1000)
-myFastTimerABuy = setInterval(()=>buyMaxGenerators(1,6), 7*1000)
-myFastTimerCBuy = setInterval(()=>buyMaxGenerators(3,6), 17*1000) 
-*/
-
-/*
 
   Initially I was trying to stay away from the game's state but I eventually gave up.
   So there is a mix of screen scraping and direct calls and even a bit of inspection of the global game object.

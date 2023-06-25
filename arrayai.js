@@ -38,18 +38,21 @@
 
 */ 
 
+function ensureNumber(x) {
+    return Number((""+x).replaceAll(",",""));
+}
 function convertBird(x) {
     if (x[0] == "{") {
         return Number(x.split(", ")[1].replace("}","").replaceAll(",",""))
     } else {
-        return Math.log10(x);
+        return Math.log10(ensureNumber(x));
     }
 }
 function gte(x,y) {
     if (x[0] == "{" || y[0] == "{") {
         return convertBird(x) >= convertBird(y);
     } else {
-        return Number((""+x).replaceAll(",","")) >= Number((""+y).replaceAll(",",""))
+        return ensureNumber(x) >= ensureNumber(y);
     }
 }
 function lte(x,y) {
@@ -74,15 +77,20 @@ function parseScore() {
     var sectioned = document.getElementById("array").innerText.indexOf("[") >= 0;
     // console.log(scores);
     var score = {};
+    var entries = ["A","B","C","D","S","E","F"];
+    for (var i = 0; i < entries.length; i++) {
+        score[entries[i]] = format(game.array[i],0,9,"Array");
+    }
+    /* 
     score["A"] = scores[0];
     if ( sectioned ) {
         score["B"] = 0;
         score["C"] = 0;
         score["D"] = 0;
-        score["S"] = scores[scores.length-3];
-        score["E"] = scores[scores.length-2];
-        score["F"] = scores[scores.length-1];
-        if ( scores.length > 3 ) {
+        score["S"] = 0;
+        score["E"] = 0;
+        score["F"] = 0;
+        if ( scores.length >= 3 ) {
             score["B"] = scores[1];
         }
         if ( scores.length > 4 ) {
@@ -91,9 +99,14 @@ function parseScore() {
         if ( scores.length > 5 ) {
             score["D"] = scores[3];
         }
-        if ( scores.length > 6 ) {
+        if ( scores.length > 5 ) {
             score["S"] = scores[4];
+        }
+        if ( scores.length > 5 ) {
             score["E"] = scores[5];
+        }
+        if ( scores.length > 6 ) {
+            score["E"] = scores[6];
         }
     } else {
         score["B"] = 0;
@@ -109,7 +122,8 @@ function parseScore() {
             score["D"] = scores[3];
         }
 
-    }
+    }x
+    */
     return score
 }
 
@@ -240,6 +254,7 @@ class ArrayAI {
 // Singleton :(
 ArrayAI.instance = new ArrayAI();
 ArrayAI.instance.disableAlert();
+ArrayAI.instance.disableConfirm();
 
 function AI() {
     return ArrayAI.instance;
@@ -287,7 +302,9 @@ function stateAResetting(machine=undefined) {
         console.log("Setting min Reset to 14.3201 instead of 10.01");
     }
     if (gte(score["A"], machine.get("minAReset",minAReset))) {
+        ArrayAI.instance.disableConfirm();
         AI().resetA();
+        ArrayAI.instance.enableConfirm();
     }
     AI().buyMaxAUpgrades();
     AI().buyAGenerators();
@@ -327,19 +344,28 @@ function stateBResetting(machine=undefined) {
         AI().buyUpgrades();
         return stateCBuying;
     }
-    var bResetScore = AI().isCMilestoneMet(8)?"{10, 14.2301}":"{10, 10.01}";
+    // var bResetScore = AI().isCMilestoneMet(8)?"{10, 14.2301}":"{10, 10.01}";
+    var bResetScore = "{10, 10.01}";
     if (gte(score["B"],bResetScore)) {
         // there's going to be a problem here
         // we have to go back to Aresetting unless
-        // we have 20% gain enabled        
+        // we have 20% gain enabled
+        AI().disableConfirm()
         AI().resetB();
+        AI().enableConfirm()
         if (AI().isBUpgradeEnabled(3)) {
             console.log("We don't have enough Cs to keep 20% B/s going");
             return stateStart;
         }
-    }   
+    }
+    // is this fast enough?
     AI().buyAGenerators();
-    AI().buyBGenerators();
+    if (gte(score["B"],machine.get("BResetHoldMin",1e9)) && lt(score["B"],"{10, 10}")) {
+        // don't buy
+        console.log("Not buying B");
+    } else {
+        AI().buyBGenerators();
+    }
     if (AI().isCMilestoneMet(9) && !AI().isCMilestoneMet(10)) {
         // don't buy between 100 and 300
         if (game.CGeneratorsBought[1].toString() == "0") {
@@ -360,8 +386,6 @@ function stateBResetting(machine=undefined) {
 
 function stateCBuying(machine=undefined) {
     machine.debug("stateCBuying");
-    AI().buyUpgrades();
-    AI().buyAllGenerators();
     var score = parseScore();
     machine.set("CBuyingTicks",1+machine.get("CBuyingTicks",1));
     var cticks = machine.get("CBuyingTicks",0);
@@ -369,11 +393,15 @@ function stateCBuying(machine=undefined) {
         machine.push(stateCBuying);
         return stateChooseChallenge;
     }
-    if (gte(score["C"],"{10, 10.01}")) {
+    // if (gte(score["C"],"{10, 10.01}")) {
+    if (gte(score["C"],"{10, 9.2}")) {
         return stateCResetting;
     }
+    AI().buyUpgrades();
+    AI().buyAllGenerators();
     return stateCBuying;
 }
+// there could be some bugs here about the resetC and transitioning to DBuying
 function stateCResetting(machine=undefined) {
     machine.debug("stateCResetting");
     var score = parseScore();
@@ -382,11 +410,13 @@ function stateCResetting(machine=undefined) {
         AI().buyUpgrades();
         return stateDBuying;
     }
-    if (gte(score["C"],"{10, 10}")) {
+    if (gt(score["C"],"{10, 10}")) {
+        AI().disableConfirm();
         AI().resetC();
+        AI().enableConfirm();
         // we need a check here for if we achieved the C/s
         // if 
-        // return stateStart;
+        return stateStart;
     }   
     AI().buyAGenerators();
     AI().buyBGenerators();// should we do this?
@@ -405,9 +435,25 @@ function stateDBuying(machine=undefined) {
         return stateChooseChallenge;
     }
     var score = parseScore();
+    if (eq(score["S"],1) && gte(score["D"],"{10, 10.00}")) {
+        AI().disableConfirm();
+        AI().resetD();
+        AI().enableConfirm();
+        AI().buyUpgrades();
+        AI().buySBoosts();
+        AI().buyMaxEF();
+        return stateStart;
+    }
     if (gte(score["D"],"{10, 12.01}")) {
         // time to build up to a reset
         return stateDResetting;
+    }
+    if (gt(score["D"],"{10, 10.00}")) {
+        if (! machine.get("unlocksep",0)) {
+            machine.set("unlocksep",1);
+	    unlockSeparators();
+	    console.log("Unlocked seperators!");
+        }
     }
     return stateDBuying;
 }
@@ -415,7 +461,9 @@ function stateDResetting(machine=undefined) {
     machine.debug("stateDResetting");
     var score = parseScore();
     if (gte(score["D"],machine.get("DReset","{10, 17.3201}"))) {
+        AI().disableConfirm();
         AI().resetD();
+        AI().enableConfirm();
         // we need a check here for if we achieved the D/s
         // probably we're fine, the state machine will run its course
         if (!AI().isSeparatorUpgradeBuyable(5)) {

@@ -150,6 +150,7 @@ class ArrayAI {
     }
     buySBoosts() {
         if (game.separatorBoosts && game.separatorBoosts.length >= 3) {
+            calculateUnspentSeparators();
             buySeparatorBoost(4);
         }
     }
@@ -250,13 +251,16 @@ function stateStart(machine=undefined) {
 // Returns true if we could reset and buy Keep A & B Challenges
 function separatorCheck(machine) {
     var separatorPoints = game.separatorPoints;
-    return (separatorPoints.gte(5) && game.separatorUpgradesBought.length >= 1 &&  game.separatorUpgradesBought[0] == 0);
+    // check for the first upgrade, check for the 5th upgrade
+    return (separatorPoints.gte(5) && game.separatorUpgradesBought.length >= 1 &&  game.separatorUpgradesBought[0] == 0) ||  (separatorPoints.gte(123) && game.separatorUpgradesBought.length >= 5 &&  game.separatorUpgradesBought[4] == 0) || (separatorPoints.gte(123+250000) && game.separatorUpgradesBought.length >= 6 &&  game.separatorUpgradesBought[5] == 0) ;
 }
 function separatorResetAndBuy(machine) {
         var separatorPoints = game.separatorPoints;
         if (game.unspentSeparatorPoints && game.unspentSeparatorPoints.lt(5)) {
             console.log("We are resetting to ensure we buy an SP upgrade!");
+            ArrayAI.instance.disableConfirm();
             refundSeparatorPoints(); // this is a reset!
+            ArrayAI.instance.enableConfirm();
         }
         console.log("Buying Separator upgrades");
         AI().buyUpgrades();
@@ -460,17 +464,12 @@ function stateDResetting(machine=undefined) {
     machine.debug("stateDResetting");
     var score = parseScore();
     // if we haven't seen a 14.14 reset now
+    var override = false;
     if (!machine.get("D14",false) && gt(score["D"],"{10, 14.32}")) {
-        AI().disableConfirm();
-        AI().resetD();
-        AI().enableConfirm();
         machine.set("D14", true);
-        AI().buyUpgrades();
-        AI().buySBoosts();
-        AI().buyMaxEF();
-        return stateStart;
+        override = true;
     }
-    if (gte(score["D"],machine.get("DReset","{10, 17.3201}"))) {
+    if (override || gte(score["D"],machine.get("DReset","{10, 17.3201}"))) {
         console.log("Resetting D");
         AI().disableConfirm();
         AI().resetD();
@@ -505,6 +504,9 @@ function stateSeparator(machine) {
     AI().buyUpgrades();
     AI().buySBoosts();
     AI().buyMaxEF();
+    if (doSeparatorCheckAndReset(machine)) {
+        return stateStart;
+    }
     return stateSeparator;
 }
 

@@ -77,53 +77,11 @@ function parseScore() {
     var sectioned = document.getElementById("array").innerText.indexOf("[") >= 0;
     // console.log(scores);
     var score = {};
-    var entries = ["A","B","C","D","S","E","F"];
+    var entries = ["A","B","C","D","E","F"];
     for (var i = 0; i < entries.length; i++) {
         score[entries[i]] = format(game.array[i],0,9,"Array");
     }
-    /* 
-    score["A"] = scores[0];
-    if ( sectioned ) {
-        score["B"] = 0;
-        score["C"] = 0;
-        score["D"] = 0;
-        score["S"] = 0;
-        score["E"] = 0;
-        score["F"] = 0;
-        if ( scores.length >= 3 ) {
-            score["B"] = scores[1];
-        }
-        if ( scores.length > 4 ) {
-            score["C"] = scores[2];
-        }
-        if ( scores.length > 5 ) {
-            score["D"] = scores[3];
-        }
-        if ( scores.length > 5 ) {
-            score["S"] = scores[4];
-        }
-        if ( scores.length > 5 ) {
-            score["E"] = scores[5];
-        }
-        if ( scores.length > 6 ) {
-            score["E"] = scores[6];
-        }
-    } else {
-        score["B"] = 0;
-        score["C"] = 0;
-        score["D"] = 0;
-        if ( scores.length >= 2 ) {
-            score["B"] = scores[1];
-        }
-        if ( scores.length >= 3 ) {
-            score["C"] = scores[2];
-        }
-        if ( scores.length >= 4 ) {
-            score["D"] = scores[3];
-        }
-
-    }x
-    */
+    score["S"] = format(game.separators[0],0,9,"Array");
     return score
 }
 
@@ -155,13 +113,17 @@ class ArrayAI {
     }
     isBUpgradeEnabled(i) {
         // 1-indexed
-        return !(document.getElementsByClassName("BUpgrade")[i-1].disabled);
+        var upgrades = document.getElementsByClassName("BUpgrade");
+        if (i-1 >= upgrades.length) {
+            return true;
+        }
+        return !(upgrades[i-1].disabled);
     }
     isBUpgradeBuyable(i) {
         return this.isBUpgradeEnabled(i);
     }
     buyBUpgrades() {
-        for (var i = 1; i <= 10; i++) {
+        for (var i = 1; i <= 11; i++) {
             if (this.isBUpgradeEnabled(i)) {
                 buyUpgrade(2,i)
             }
@@ -174,7 +136,7 @@ class ArrayAI {
         buyUpgrade(1,4); // buy max A upgrades
     }
     isSeparatorUpgradeBuyable(oneIndexed) {
-        return game.separatorUpgradesBought[oneIndexed-1].toNumber() == 0;
+        return game.separatorUpgradesBought.length >= oneIndexed && game.separatorUpgradesBought[oneIndexed-1].toNumber() == 0;
     }
     buySeparatorUpgrade(oneIndexed) {
         if (this.isSeparatorUpgradeBuyable(oneIndexed)) {
@@ -187,7 +149,9 @@ class ArrayAI {
         }
     }
     buySBoosts() {
-        buySeparatorBoost(4);
+        if (game.separatorBoosts && game.separatorBoosts.length >= 3) {
+            buySeparatorBoost(4);
+        }
     }
     buyUpgrades() {
         this.buyCDoubler();
@@ -219,6 +183,8 @@ class ArrayAI {
         this.disableConfirm();
         upgradeSeparator();
         this.enableConfirm();
+        // just make sure this is ok.
+        calculateUnspentSeparators();
         //this._reset(4);
     }
     disableAlert() {
@@ -269,12 +235,42 @@ function stateStart(machine=undefined) {
     machine.debug("stateStart");
     AI().buyUpgrades();
     AI().buyAllGenerators();
+    AI().buySBoosts();
+    AI().buyMaxEF();
     var score = parseScore();
+    if (doSeparatorCheckAndReset(machine)) {
+        return stateStart;
+    }
     if (gte(score["A"],"{10, 10}")) {
         return stateAResetting;
     }
     return stateStart;
 }
+
+// Returns true if we could reset and buy Keep A & B Challenges
+function separatorCheck(machine) {
+    var separatorPoints = game.separatorPoints;
+    return (separatorPoints.gte(5) && game.separatorUpgradesBought.length >= 1 &&  game.separatorUpgradesBought[0] == 0);
+}
+function separatorResetAndBuy(machine) {
+        var separatorPoints = game.separatorPoints;
+        if (game.unspentSeparatorPoints && game.unspentSeparatorPoints.lt(5)) {
+            console.log("We are resetting to ensure we buy an SP upgrade!");
+            refundSeparatorPoints(); // this is a reset!
+        }
+        console.log("Buying Separator upgrades");
+        AI().buyUpgrades();
+        AI().buySBoosts();
+        AI().buyMaxEF();
+}
+function doSeparatorCheckAndReset(machine) {
+    if (separatorCheck(machine)) {
+        separatorResetAndBuy(machine);
+        return true;
+    }
+    return false;
+}
+
 
 // There's a bug here we transition to BBuying without our upgrade
 var _minAReset = "{10, 10.01}";
@@ -359,7 +355,9 @@ function stateBResetting(machine=undefined) {
         }
     }
     // is this fast enough?
-    AI().buyAGenerators();
+    // AI().buyAGenerators();
+    AI().buyUpgrades(); // upgrades before A generators?
+    score = parseScore();
     if (gte(score["B"],machine.get("BResetHoldMin",1e9)) && lt(score["B"],"{10, 10}")) {
         // don't buy
         console.log("Not buying B");
@@ -374,7 +372,8 @@ function stateBResetting(machine=undefined) {
     } else {
         AI().buyCGenerators(); 
     }
-    AI().buyUpgrades();
+    AI().buyAGenerators();
+
     // do we do a challenge?
     var ticks = machine.inc("BResetting Ticks");
     if (ticks > 0 && ticks % machine.get("BTicksPerChallenge",200) == 0) {
@@ -452,7 +451,7 @@ function stateDBuying(machine=undefined) {
         if (! machine.get("unlocksep",0)) {
             machine.set("unlocksep",1);
 	    unlockSeparators();
-	    console.log("Unlocked seperators!");
+	    console.log("Unlocked separators!");
         }
     }
     return stateDBuying;
@@ -460,10 +459,25 @@ function stateDBuying(machine=undefined) {
 function stateDResetting(machine=undefined) {
     machine.debug("stateDResetting");
     var score = parseScore();
-    if (gte(score["D"],machine.get("DReset","{10, 17.3201}"))) {
+    // if we haven't seen a 14.14 reset now
+    if (!machine.get("D14",false) && gt(score["D"],"{10, 14.32}")) {
         AI().disableConfirm();
         AI().resetD();
         AI().enableConfirm();
+        machine.set("D14", true);
+        AI().buyUpgrades();
+        AI().buySBoosts();
+        AI().buyMaxEF();
+        return stateStart;
+    }
+    if (gte(score["D"],machine.get("DReset","{10, 17.3201}"))) {
+        console.log("Resetting D");
+        AI().disableConfirm();
+        AI().resetD();
+        AI().enableConfirm();
+        AI().buyUpgrades();
+        AI().buySBoosts();
+        AI().buyMaxEF();
         // we need a check here for if we achieved the D/s
         // probably we're fine, the state machine will run its course
         if (!AI().isSeparatorUpgradeBuyable(5)) {

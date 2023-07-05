@@ -404,12 +404,16 @@ function stateCBuying(machine=undefined) {
     AI().buyAllGenerators();
     return stateCBuying;
 }
+function doesDSelfGenerate() {
+    return game.DMilestonesReached >= 8 
+}
+
 // there could be some bugs here about the resetC and transitioning to DBuying
 function stateCResetting(machine=undefined) {
     machine.debug("stateCResetting");
     var score = parseScore();
-    if (gte(score["D"],200)) {
-        // buy upgrades will purchase the upgrade at 200
+    if (gte(score["D"],100) || doesDSelfGenerate()) {
+        // buy upgrades will purchase the upgrade at 100
         AI().buyUpgrades();
         return stateDBuying;
     }

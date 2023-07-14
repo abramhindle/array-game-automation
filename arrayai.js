@@ -182,6 +182,7 @@ class ArrayAI {
     resetD() {
         // hmmm
         this.disableConfirm();
+        unlockSeparators();
         upgradeSeparator();
         this.enableConfirm();
         // just make sure this is ok.
@@ -380,7 +381,7 @@ function stateBResetting(machine=undefined) {
 
     // do we do a challenge?
     var ticks = machine.inc("BResetting Ticks");
-    if (ticks > 0 && ticks % machine.get("BTicksPerChallenge",200) == 0) {
+    if (ticks > 0 && ticks % machine.get("BTicksPerChallenge",600) == 0) {
         machine.push(stateBResetting);
         return stateChooseAChallenge;
     }
@@ -467,6 +468,11 @@ function stateDBuying(machine=undefined) {
 function stateDResetting(machine=undefined) {
     machine.debug("stateDResetting");
     var score = parseScore();
+    if (!AI().isSeparatorUpgradeBuyable(5)) {
+        console.log("I think we don't need to reset D, we already get separators automatically");
+        changeTab(5);
+        return stateSeparator;        
+    }    
     // if we haven't seen a 14.14 reset now
     var override = false;
     if (!machine.get("D14",false) && gt(score["D"],"{10, 14.32}")) {

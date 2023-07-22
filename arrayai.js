@@ -257,11 +257,13 @@ function separatorCheck(machine) {
 }
 function separatorResetAndBuy(machine) {
         var separatorPoints = game.separatorPoints;
+        calculateUnspentSeparators();
         if (game.unspentSeparatorPoints && game.unspentSeparatorPoints.lt(5)) {
             console.log("We are resetting to ensure we buy an SP upgrade!");
             ArrayAI.instance.disableConfirm();
             refundSeparatorPoints(); // this is a reset!
             ArrayAI.instance.enableConfirm();
+            calculateUnspentSeparators();
         }
         console.log("Buying Separator upgrades");
         AI().buyUpgrades();

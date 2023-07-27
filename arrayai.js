@@ -501,6 +501,7 @@ function stateDResetting(machine=undefined) {
     AI().buyAGenerators();
     AI().buyBGenerators();
     AI().buyCGenerators();
+    AI().buyDGenerators();
     AI().buyUpgrades();
     var ticks = machine.inc("DResettingTicks",0);
     if (ticks > 0 && (ticks % machine.get("DResettingTicksPerChallenge",600)) == 0) {

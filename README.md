@@ -36,4 +36,7 @@ After having fun consider paying demonin for it:
 
 https://www.patreon.com/Demonin
 
+# Current Times to [{10, 10}]
 
+Game 1: 29 days (there was a bug)
+Game 2: 20 days

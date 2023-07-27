@@ -30,6 +30,8 @@ And then paste that into Firefox Inspector
 
 Array game is proprietary software with an unknown license, this script is GPL3 though.
 
+Demonin has released the ArrayGame on github nonethless! https://github.com/DemoninCG/ArrayGame
+
 # Donations and Tips
 
 After having fun consider paying demonin for it:
